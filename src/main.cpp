@@ -3,8 +3,8 @@
 #include <HardwareSerial.h>
 
 // Define UART parameters
-#define UART1_TX_PIN 17 
-#define UART1_RX_PIN 16
+#define UART1_TX_PIN 43 
+#define UART1_RX_PIN 44
 #define BAUD_RATE_1 115200
 #define BAUD_RATE_2 921600
 
@@ -12,7 +12,7 @@ HardwareSerial a101Serial(1); // Create a HardwareSerial object for UART1
 
 void setup() {
 
-  Serial.begin(BAUD_RATE_2);
+  Serial.begin(BAUD_RATE_1);
   a101Serial.begin(BAUD_RATE_1, SERIAL_8N1, UART1_RX_PIN, UART1_TX_PIN);
 
   // Optional: Send initial commands to the camera
