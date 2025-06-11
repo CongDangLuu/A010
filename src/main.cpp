@@ -16,12 +16,14 @@ char buffer[20];
 void setup() {
 
   Serial.begin(BAUD_RATE_1);
-  a101Serial.begin(BAUD_RATE_1, SERIAL_8N1, UART1_RX_PIN, UART1_TX_PIN);
+  a101Serial.begin(BAUD_RATE_2, SERIAL_8N1, UART1_RX_PIN, UART1_TX_PIN);
 
   // Optional: Send initial commands to the camera
-  a101Serial.print("AT+FPS=19\r");  // Set frames per second
+  a101Serial.print("AT+FPS=19\r\n");  // Set frames per second
   delay(100);
-  a101Serial.print("AT+DISP=4\r");  // Set display mode
+  a101Serial.print("AT+DISP=5\r\n");  // Set display mode
+  delay(100);
+  a101Serial.print("AT+SAVE\r\n");  // Set display mode
   delay(100);
 }
 
