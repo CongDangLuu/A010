@@ -2,11 +2,11 @@
 #include <WiFi.h>
 
 // WiFi credentials
-const char* ssid = "CMCC-7VsN";     // wifi name
-const char* password = "Gg7k7U2d";  // password
+const char* ssid = "TODO";     // wifi name
+const char* password = "TODO";  // password
 
 // Static IP configuration
-IPAddress staticIP(192, 168, 1, 200);    // static IP
+IPAddress staticIP(192, 168, 1, 15);    // static IP
 IPAddress gateway(192, 168, 1, 1);       // gateway address
 IPAddress subnet(255, 255, 255, 0);      // subnet mark
 
@@ -35,6 +35,7 @@ void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
+  Serial.println("Starting Camera initialization ...");
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
