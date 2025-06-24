@@ -1,6 +1,23 @@
 #include "esp_camera.h"
 #include <WiFi.h>
 
+#define ESP32_BLE
+// #define ESP32_WIFI
+
+#define ARDUHAL_LOG_LEVEL 1
+
+#if defined(ESP32_BLE)
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+#include <esp_gap_ble_api.h>
+#include <esp_gatts_api.h>
+#include <esp_bt_defs.h>
+#include <esp_bt_main.h>
+#endif
+
+
 // WiFi credentials
 const char* ssid = "TODO";     // wifi name
 const char* password = "TODO";  // password
@@ -31,10 +48,59 @@ IPAddress subnet(255, 255, 255, 0);      // subnet mark
 
 void startCameraServer();
 
+#if defined(ESP32_BLE)
+BLEServer *pServer = NULL;
+BLECharacteristic * pTxCharacteristic;
+bool deviceConnected = false;
+bool oldDeviceConnected = false;
+uint8_t txValue = 0;
+// #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
+// #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+// #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+#define SERVICE_UUID           "0000fff0-0000-1000-8000-00805f9b34fb" // UART service UUID
+#define CHARACTERISTIC_UUID_RX "0000fff1-0000-1000-8000-00805f9b34fb"
+#define CHARACTERISTIC_UUID_TX "0000fff2-0000-1000-8000-00805f9b34fb"
+
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println("Device connected");
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println("Device disconnected");
+      // Restart advertising when device disconnects
+      pServer->startAdvertising();
+    }
+};
+
+class MyCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      std::string rxValue = pCharacteristic->getValue();
+
+      if (rxValue.length() > 0) {
+        Serial.println("*********");
+        Serial.print("Received Value: ");
+        for (int i = 0; i < rxValue.length(); i++)
+          Serial.print(rxValue[i]);
+
+        Serial.println();
+        Serial.println("*********");
+      }
+    }
+};
+
+#endif
+
 void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
+
+  delay(2000);
+
+  #if defined(ESP32_WIFI)
   Serial.println("Starting Camera initialization ...");
 
   camera_config_t config;
@@ -138,12 +204,101 @@ void setup() {
   Serial.print("Camera stream available at: http://");
   Serial.println(IP);
   Serial.println("----------------------------------------");
+  #endif
+
+  #if defined(ESP32_BLE)
+  Serial.println("Starting BLE initialization...");
+  
+  // Initialize BLE device with a shorter name
+  BLEDevice::init("ESP32_BLE");
+  
+  // Set MTU size to avoid fragmentation issues
+  BLEDevice::setMTU(23);
+  
+  // Create BLE server
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+  
+  // Create BLE service
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  
+  // Create RX characteristic (for receiving data from phone)
+  BLECharacteristic *pRxCharacteristic = pService->createCharacteristic(
+    CHARACTERISTIC_UUID_RX,
+    BLECharacteristic::PROPERTY_WRITE |
+    BLECharacteristic::PROPERTY_WRITE_NR
+  );
+  pRxCharacteristic->setCallbacks(new MyCallbacks());
+  
+  // Create TX characteristic (for sending data to phone)
+  pTxCharacteristic = pService->createCharacteristic(
+    CHARACTERISTIC_UUID_TX,
+    BLECharacteristic::PROPERTY_READ |
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pTxCharacteristic->addDescriptor(new BLE2902());
+  
+  // Set initial value for TX characteristic
+  pTxCharacteristic->setValue("Hello from ESP32!");
+  
+  // Start the service
+  pService->start();
+  
+  // Configure advertising with simpler settings
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(false);
+  pAdvertising->setMinInterval(0x20); // 20ms
+  pAdvertising->setMaxInterval(0x40); // 40ms
+  
+  // Start advertising
+  BLEDevice::startAdvertising();
+  Serial.println("BLE Server started and advertising");
+  Serial.println("Device name: ESP32_BLE");
+  Serial.println("Service UUID: " + String(SERVICE_UUID));
+  Serial.println("RX Characteristic UUID: " + String(CHARACTERISTIC_UUID_RX));
+  Serial.println("TX Characteristic UUID: " + String(CHARACTERISTIC_UUID_TX));
+  Serial.println("Waiting for connections...");
+  #endif
 }
 
 void loop() {
+  #if defined(ESP32_WIFI)
   if(WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi connection lost. Reconnecting...");
     WiFi.reconnect();
     delay(1000);
   }
+  #endif
+
+  #if defined(ESP32_BLE)
+  // Handle BLE connection state changes
+  if (deviceConnected && !oldDeviceConnected) {
+    // New connection
+    oldDeviceConnected = deviceConnected;
+    Serial.println("New device connected! \n");
+  }
+  
+  if (!deviceConnected && oldDeviceConnected) {
+    // Device disconnected
+    oldDeviceConnected = deviceConnected;
+    Serial.println("Device disconnected! \n");
+    delay(500); // Give the BLE stack a chance to get an event
+  }
+  
+  // If connected, you can send data periodically
+  if (deviceConnected) {
+    // Example: Send data every 2 seconds
+    static unsigned long lastSend = 0;
+    if (millis() - lastSend > 2000) {
+      String message = "ESP32 Time: " + String(millis());
+      pTxCharacteristic->setValue(message.c_str());
+      pTxCharacteristic->notify();
+      Serial.println("Sent: " + message);
+      lastSend = millis();
+    }
+  }
+  
+  delay(100); // Small delay to prevent watchdog issues
+  #endif
 }
