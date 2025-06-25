@@ -8,7 +8,7 @@
 
 #if defined(ESP32_BLE)
 #include <XiaoBleServer.h>
-XiaoBleServer* bleServer = nullptr;
+XiaoBleServer bleServer;
 #endif
 
 
@@ -156,8 +156,12 @@ void setup() {
   #endif
 
   #if defined(ESP32_BLE)
-  bleServer = new XiaoBleServer();
-  bleServer->init();
+  bleServer.setOnDataReceived([](const std::string& data) {
+    Serial.print("Received over BLE: ");
+    Serial.println(data.c_str());
+  });
+
+  bleServer.init();
   #endif
 }
 
@@ -172,10 +176,10 @@ void loop() {
 
   #if defined(ESP32_BLE)
   // Check BLE connection status
-  bleServer->checkConnection();
+  bleServer.checkConnection();
   static unsigned long lastSend = 0;
   if (millis() - lastSend > 2000) {
-    bleServer->sendMessage(String(millis()));
+    bleServer.sendMessage(String(millis()));
     lastSend = millis();
   }
 

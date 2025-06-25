@@ -1,61 +1,8 @@
 #include "XiaoBleServer.h"
 
-// XiaoBleServerCallback class implementation
-XiaoBleServerCallback::XiaoBleServerCallback() {}
-
-XiaoBleServerCallback::~XiaoBleServerCallback() {}
-
-void XiaoBleServerCallback::onConnect(BLEServer *pServer) {
-    deviceConnected = true;
-    Serial.println("Device connected");
-}
-
-void XiaoBleServerCallback::onDisconnect(BLEServer *pServer) {
-    deviceConnected = false;
-    Serial.println("Device disconnected");
-    // Restart advertising when device disconnects
-    pServer->startAdvertising();
-}
-
-bool XiaoBleServerCallback::isDeviceConnected() const {
-    return deviceConnected;
-}
-
-// XiaoBleCallbacks class implementation
-XiaoBleCallbacks::XiaoBleCallbacks() {}
-
-XiaoBleCallbacks::~XiaoBleCallbacks() {}
-
-void XiaoBleCallbacks::onWrite(BLECharacteristic *pCharacteristic) {
-    std::string rxValue = pCharacteristic->getValue();
-
-    if (rxValue.length() > 0)
-    {
-        Serial.println("*********");
-        Serial.print("Received Value: ");
-        for (int i = 0; i < rxValue.length(); i++)
-            Serial.print(rxValue[i]);
-
-        Serial.println();
-        Serial.println("*********");
-    }
-}
-
 // XiaoBleServer class implementation
-XiaoBleServer::XiaoBleServer() {
-    pServer = nullptr;
-    pTxCharacteristic = nullptr;
-    serverCallback = new XiaoBleServerCallback();
-    // characteristicCallback = new XiaoBleCallbacks();
-}
-XiaoBleServer::~XiaoBleServer() {
-    if (pServer) {
-        delete pServer;
-        pServer = nullptr;
-    }
-    delete serverCallback;
-    delete characteristicCallback;
-}
+XiaoBleServer::XiaoBleServer() {}
+XiaoBleServer::~XiaoBleServer() {}
 
 void XiaoBleServer::init() {
     // Create the BLE Device
@@ -66,7 +13,7 @@ void XiaoBleServer::init() {
 
     // Create BLE server
     pServer = BLEDevice::createServer();
-    pServer->setCallbacks(serverCallback);
+    pServer->setCallbacks(&serverCallback);
 
     // Create the BLE Service
     BLEService *pService = pServer->createService(SERVICE_UUID);
@@ -76,7 +23,7 @@ void XiaoBleServer::init() {
         CHARACTERISTIC_UUID_RX,
         BLECharacteristic::PROPERTY_WRITE |
             BLECharacteristic::PROPERTY_WRITE_NR);
-    pRxCharacteristic->setCallbacks(new XiaoBleCallbacks());
+    pRxCharacteristic->setCallbacks(&characteristicCallback);
 
     // Create TX characteristic (for sending data to phone)
     pTxCharacteristic = pService->createCharacteristic(
@@ -109,7 +56,7 @@ void XiaoBleServer::init() {
 }
 
 void XiaoBleServer::checkConnection() {
-    deviceConnected = serverCallback->isDeviceConnected();
+    deviceConnected = serverCallback.isDeviceConnected();
     if (deviceConnected && !oldDeviceConnected) {
         // New connection
         oldDeviceConnected = deviceConnected;
@@ -131,4 +78,8 @@ void XiaoBleServer::sendMessage(const String& message) {
     pTxCharacteristic->setValue(mess.c_str());
     pTxCharacteristic->notify();
     Serial.println("Sent: " + mess); 
+}
+
+void XiaoBleServer::setOnDataReceived(std::function<void(const std::string&)> callback) {
+    characteristicCallback.setOnDataReceived(callback);
 }
