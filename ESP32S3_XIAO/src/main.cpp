@@ -15,6 +15,13 @@ XiaoBleServer bleServer;
 
 //init camera
 Cam cam;
+
+// Button
+constexpr gpio_num_t PIN_BUTTON = GPIO_NUM_0;   // need confirm
+constexpr uint32_t   DEBOUNCE_MS = 20;
+/* ---- Button state ---- */
+bool     lastBtnState = true;    // TRUE = OFF(PULL‑UP)
+uint32_t lastDebounceTime = 0;
 #endif
 
 #ifdef ESP32_WIFI
@@ -53,6 +60,7 @@ void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
+  pinMode(PIN_BUTTON, INPUT_PULLUP); 
 
   delay(2000);
 
@@ -196,23 +204,37 @@ void loop() {
   //   bleServer.sendMessage(String(millis()));
   //   lastSend = millis();
   // }
-  // Camera part
-  {
-  //Get frame of camera
-  camera_fb_t *fb = cam.capture();
-    if (!fb) {
-        Serial.println("[Main] Capture failed");
-        return;
-    }
-  // Send the image via Bluetooth -----
-    uint32_t len = fb->len;
-    bleServer.sendMessage(String(len)); // send the length(4 byte)
-    bleServer.sendMessage(String(*(fb->buf)));                        // send JPEG
 
-    cam.returnFrame(fb);            // return buffer
-    cam.setFrameDelay(2000);        // set delay
-    delay(cam.frameDelay()); 
+  /* ----- read buttion with debounce ----- */
+    bool rawState = digitalRead(PIN_BUTTON);          // HIGH/LOW
+    if (rawState != lastBtnState) {                   // Statement of Buttion is changed
+        lastDebounceTime = millis();                  // reset debounce time
+        lastBtnState = rawState;
     }
+
+    if ((millis() - lastDebounceTime) > DEBOUNCE_MS) {
+        if (rawState == LOW) {                        // Button is pressed
+            // Camera part
+          //Get frame of camera
+          camera_fb_t *fb = cam.capture();
+          if (!fb) {
+            Serial.println("[Main] Capture failed");
+            return;
+          }
+          // Send the image via Bluetooth -----
+          uint32_t len = fb->len;
+          bleServer.sendMessage(String(len)); // send the length(4 byte)
+          bleServer.sendMessage(String(*(fb->buf)));                        // send JPEG
+
+          cam.returnFrame(fb);            // return buffer
+          cam.setFrameDelay(2000);        // set delay
+          delay(cam.frameDelay()); 
+            /* waitting release Button*/
+          while (digitalRead(PIN_BUTTON) == LOW) { delay(10); }
+        }
+    }
+
+  
   delay(100); // Small delay to prevent watchdog issues
   #endif
 }
