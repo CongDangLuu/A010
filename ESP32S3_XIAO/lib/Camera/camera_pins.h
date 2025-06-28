@@ -23,19 +23,19 @@
 
 // XIAO ESP32‑S3 (Sense) pin map
 static camera_config_t cam_config = {
-    .pin_pwdn  = -1,
-    .pin_reset = -1,
-    .pin_xclk  = 10,
+    .pin_pwdn  = PWDN_GPIO_NUM,
+    .pin_reset = RESET_GPIO_NUM,
+    .pin_xclk  = XCLK_GPIO_NUM,
 
-    .pin_sscb_sda = 11,
-    .pin_sscb_scl = 12,
+    .pin_sscb_sda = SIOD_GPIO_NUM,
+    .pin_sscb_scl = SIOC_GPIO_NUM,
 
-    .pin_d7 = 39, .pin_d6 = 40, .pin_d5 = 41, .pin_d4 = 42,
-    .pin_d3 = 45, .pin_d2 = 46, .pin_d1 = 47, .pin_d0 = 48,
+    .pin_d7 = Y9_GPIO_NUM, .pin_d6 = Y8_GPIO_NUM, .pin_d5 = Y7_GPIO_NUM, .pin_d4 = Y6_GPIO_NUM,
+    .pin_d3 = Y5_GPIO_NUM, .pin_d2 = Y4_GPIO_NUM, .pin_d1 = Y3_GPIO_NUM, .pin_d0 = Y2_GPIO_NUM,
 
-    .pin_vsync = 13,
-    .pin_href  = 14,
-    .pin_pclk  = 15,
+    .pin_vsync = VSYNC_GPIO_NUM,
+    .pin_href  = HREF_GPIO_NUM,
+    .pin_pclk  = PCLK_GPIO_NUM,
 
     .xclk_freq_hz = 20000000,
     .ledc_timer   = LEDC_TIMER_0,
