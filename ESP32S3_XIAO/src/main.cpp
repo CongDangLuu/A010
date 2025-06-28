@@ -8,10 +8,16 @@
 
 #if defined(ESP32_BLE)
 #include <XiaoBleServer.h>
+#include <Camera.h>
+
+//init Bluetooth server
 XiaoBleServer bleServer;
+
+//init camera
+Cam cam;
 #endif
 
-
+#ifdef ESP32_WIFI
 // WiFi credentials
 const char* ssid = "TODO";     // wifi name
 const char* password = "TODO";  // password
@@ -41,6 +47,7 @@ IPAddress subnet(255, 255, 255, 0);      // subnet mark
 #define PCLK_GPIO_NUM     13
 
 void startCameraServer();
+#endif
 
 void setup() {
   Serial.begin(115200);
@@ -162,6 +169,13 @@ void setup() {
   });
 
   bleServer.init();
+
+
+  // Camerainit
+  if (!cam.begin()) {
+        Serial.println("Cam init failed, halt");
+        while (true) delay(1000);
+    }
   #endif
 }
 
@@ -177,12 +191,28 @@ void loop() {
   #if defined(ESP32_BLE)
   // Check BLE connection status
   bleServer.checkConnection();
-  static unsigned long lastSend = 0;
-  if (millis() - lastSend > 2000) {
-    bleServer.sendMessage(String(millis()));
-    lastSend = millis();
-  }
+  // static unsigned long lastSend = 0;
+  // if (millis() - lastSend > 2000) {
+  //   bleServer.sendMessage(String(millis()));
+  //   lastSend = millis();
+  // }
+  // Camera part
+  {
+  //Get frame of camera
+  camera_fb_t *fb = cam.capture();
+    if (!fb) {
+        Serial.println("[Main] Capture failed");
+        return;
+    }
+  // Send the image via Bluetooth -----
+    uint32_t len = fb->len;
+    bleServer.sendMessage(String(len)); // send the length(4 byte)
+    bleServer.sendMessage(String(*(fb->buf)));                        // send JPEG
 
+    cam.returnFrame(fb);            // return buffer
+    cam.setFrameDelay(2000);        // set delay
+    delay(cam.frameDelay()); 
+    }
   delay(100); // Small delay to prevent watchdog issues
   #endif
 }
