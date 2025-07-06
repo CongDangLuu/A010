@@ -174,10 +174,34 @@ void setup() {
   bleServer.setOnDataReceived([](const std::string& data) {
     Serial.print("Received over BLE: ");
     Serial.println(data.c_str());
+    
+    // Handle acknowledgments for image transfer
+    if (data.length() >= 4) { // Minimum acknowledgment size
+      bleServer.handleAcknowledgment(data);
+    }
   });
 
-  bleServer.init();
+  bleServer.setOnTransferComplete([](bool success) {
+    if (success) {
+      Serial.println("  Image transfer completed successfully!");
+    } else {
+      Serial.println("  Image transfer failed!");
+    }
+  });F
 
+  bleServer.init();
+  
+  // Example: Configure transfer features at runtime
+  // You can toggle these features on/off as needed
+  bleServer.setAcknowledgmentEnabled(false);   // Enable/disable acknowledgments
+  bleServer.setChecksumEnabled(false);         // Enable/disable checksums
+  bleServer.setRetryEnabled(false);            // Enable/disable retries
+  
+  // Alternative: Disable acknowledgments for faster transfer (less reliable)
+  // bleServer.setAcknowledgmentEnabled(false);
+  
+  // Alternative: Disable checksums for smaller packet size (less reliable)
+  // bleServer.setChecksumEnabled(false);
 
   // Camerainit
   if (!cam.begin()) {
@@ -185,6 +209,12 @@ void setup() {
         while (true) delay(1000);
     }
   #endif
+
+  if (bleServer.isAcknowledgmentEnabled()) {
+    Serial.println("Acknowledgment is enabled");
+  } else {
+    Serial.println("Acknowledgment is disabled");
+  }
 }
 
 void loop() {
@@ -199,11 +229,9 @@ void loop() {
   #if defined(ESP32_BLE)
   // Check BLE connection status
   bleServer.checkConnection();
-  // static unsigned long lastSend = 0;
-  // if (millis() - lastSend > 2000) {
-  //   bleServer.sendMessage(String(millis()));
-  //   lastSend = millis();
-  // }
+  
+  // Process any ongoing image transfers
+  bleServer.processTransfer();
 
   /* ----- read buttion with debounce ----- */
     bool rawState = digitalRead(PIN_BUTTON);          // HIGH/LOW
@@ -221,10 +249,46 @@ void loop() {
             Serial.println("[Main] Capture failed");
             return;
           }
-          // Send the image via Bluetooth -----
-          uint32_t len = fb->len;
-          bleServer.sendMessage(String(len)); // send the length(4 byte)
-          bleServer.sendMessage(String(*(fb->buf)));                        // send JPEG
+          // Convert image data to string and send to Serial
+          String imageDataString = "";
+          for (uint32_t i = 0; i < fb->len; i++) {
+            // Convert each byte to hex string with leading zero if needed
+            if (fb->buf[i] < 16) {
+              imageDataString += "0";
+            }
+            imageDataString += String(fb->buf[i], HEX);
+          }
+          Serial.println("  [Main] Image data as string:");
+          Serial.println(imageDataString);
+          Serial.println("  [Main] Image data sent to Serial");
+
+          // Send the image via Bluetooth using fragment transfer protocol
+          Serial.println("  Image length: " + String(fb->len));
+          Serial.println("  Starting fragment transfer...");
+          
+          // Start the fragment transfer
+          if (bleServer.startImageTransfer(fb->buf, fb->len, 0x01)) { // 0x01 = JPEG format
+            Serial.println("  Fragment transfer initiated successfully");
+            
+            // Process the transfer until completion
+            unsigned long transferStartTime = millis();
+            while (bleServer.isTransferInProgress()) {
+              bleServer.processTransfer();
+              delay(10); // Small delay to prevent watchdog issues
+              
+              // Timeout protection (30 seconds)
+              if (millis() - transferStartTime > 30000) {
+                Serial.println("  Transfer timeout - canceling");
+                bleServer.cancelTransfer();
+                break;
+              }
+            }
+            
+            unsigned long transferTime = millis() - transferStartTime;
+            Serial.printf("  Transfer completed in %lu ms\n", transferTime);
+          } else {
+            Serial.println("  Failed to start fragment transfer - check BLE connection");
+          }
 
           cam.returnFrame(fb);            // return buffer
           cam.setFrameDelay(2000);        // set delay
